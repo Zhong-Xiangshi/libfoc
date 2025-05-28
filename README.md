@@ -2,6 +2,16 @@
 An embedded FOC library  
 嵌入式 FOC 库  
 
+## ⚠️ 安全警告 / Safety Warnings
+电机控制可能造成人身伤害或设备损坏  
+Motor control may cause personal injury or equipment damage
+
+使用前必须进行安全风险评估  
+Safety risk assessment must be performed before use
+
+严禁用于生命支持系统等关键场景  
+Strictly prohibited for use in life-support systems or other critical applications
+
 ## Driver functions to be implemented (需要实现的驱动函数)  
 ```C
 typedef struct{
