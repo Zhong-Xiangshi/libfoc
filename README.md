@@ -71,8 +71,8 @@ int main(void){
     foc_set_target(&ms,0.2f);
     ...
     while(1){
-        // 5. Update current loop (recommended to call at 20k-30kHz in timer interrupt)  
-        // 5.更新电流环，建议在定时器中断以20k-30khz调用  
+        // 5. Update current loop  
+        // 5.更新电流环，建议在定时器中断调用  
         foc_current_update(&ms);
     }
 }
