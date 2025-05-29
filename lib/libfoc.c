@@ -25,9 +25,10 @@ float pid_calculate(pid_param *pid, float target, float current);
     中间函数
 */
 static void foc_motor_set_step(motor *motor,uint8_t step);
-static void foc_motor_spwm_control_by_rad(motor *motor,uint16_t size,float rad);
+static void foc_motor_spwm_control_by_rad(motor *motor,float size,float rad);
+static void foc_motor_spwm_control_by_angle(motor *motor,float size,float angle);
+static void foc_motor_spwm_control(motor *motor,vector v);
 static void foc_motor_svpwm_control(motor *motor,vector v);
-static void foc_motor_vector_control_by_angle(motor *motor,uint16_t size,float angle);
 //校准初始角度
 static void foc_base_angle_calibration(motor *motor);
 
@@ -124,7 +125,7 @@ void foc_motor_set_step(motor *motor,uint8_t step){
 /// @brief SPWM控制电机函数
 /// @param size 单位：pwm值 (峰值，相对于pwm_mid的偏移)
 /// @param rad 单位：弧度 (a相的当前电角度)
-void foc_motor_spwm_control_by_rad(motor *motor, uint16_t size, float rad)
+void foc_motor_spwm_control_by_rad(motor *motor, float size, float rad)
 {
     int16_t phase_a_pwm, phase_b_pwm, phase_c_pwm;
     uint16_t pwm_max = motor->motor_pwm_max;
@@ -138,9 +139,8 @@ void foc_motor_spwm_control_by_rad(motor *motor, uint16_t size, float rad)
 
     // 计算三相瞬时值 (相对于pwm_mid的偏移)
     float val_a = size * cosf(rad);
-    float val_b = size * cosf(rad - 2.0f * PI / 3.0f); // b相比a相滞后120度
-    float val_c = size * cosf(rad - 4.0f * PI / 3.0f); // c相比a相滞后240度
-                                                     // 或者: float val_c = size * cosf(rad + 2.0f * PI / 3.0f); // c相比a相超前120度
+    float val_b = size * cosf(rad - 2.0f * PI / 3.0f);
+    float val_c = size * cosf(rad - 4.0f * PI / 3.0f);
 
     // 转换为PWM占空比值并进行四舍五入
     phase_a_pwm = (int16_t)(val_a + pwm_mid + 0.5f);
@@ -188,11 +188,19 @@ void foc_motor_svpwm_control(motor *motor,vector v)
     // foc_debug_printf("PWM OUTPUT rad=%.1f,size=%.1f,mid_offset_phase=%.1f,phase_a=%d, phase_b=%d, phase_c=%d\n", rad*180.0f/3.1415f,size,mid_offset_phase,motor->phase_a, motor->phase_b, motor->phase_c);
     motor->driver.foc_motor_set_phase(motor->phase_a, motor->phase_b, motor->phase_c);
 }
+void foc_motor_spwm_control(motor *motor,vector v)
+{
+    float size,rad;
+    size = vector_length(v);
+    if(size> motor->motor_pwm_max / 2.0f) size = motor->motor_pwm_max / 2.0f; // 限制幅值
+    rad = atan2f(v.y, v.x); // 计算电角度
+    foc_motor_spwm_control_by_rad(motor, (uint16_t)size, rad); // 调用SPWM控制函数
+}
 
 /// @brief 通过角度矢量控制电机函数
 /// @param size 
 /// @param angle 
-void foc_motor_vector_control_by_angle(motor *motor,uint16_t size,float angle)
+void foc_motor_spwm_control_by_angle(motor *motor,float size,float angle)
 {
     float rad = angle * PI / 180.0f; 
     foc_motor_spwm_control_by_rad(motor,size, rad);
@@ -245,7 +253,7 @@ void foc_set_mode(motor *motor,foc_mode mode){
 
 void foc_base_angle_calibration(motor *motor){
     motor->driver.foc_motor_enable(1); // 使能电机驱动
-    foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 0);
+    foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 0);
     foc_delay_ms(1000);
     motor->driver.foc_get_mech_angle(&motor->mech_angle_zero);
     foc_delay_ms(10);
@@ -393,115 +401,108 @@ void foc_set_target(motor *motor,float target){
     }
 }
 
-/// @brief 每隔1s顺时针转动90电角度。如果为逆时针需要换线序或改控制代码
-/// @param  
+
+void foc_demo_0(motor *motor){
+    motor->driver.foc_motor_enable(1);
+    while (1)
+    {
+        foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 0);
+        foc_delay_ms(1000);
+    }
+}
+
 void foc_demo_1(motor *motor){
     motor->driver.foc_motor_enable(1);
     while (1)
     {
-        foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 0);
+        foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 0);
         foc_delay_ms(1000);
-        foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 90);
+        foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 90);
         foc_delay_ms(1000);
-        foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 180);
+        foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 180);
         foc_delay_ms(1000);
-        foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 270);
+        foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 270);
         foc_delay_ms(1000);
     }
     
 }
-/// @brief 依赖角度传感器。以90°固定电压矢量连续顺时针转动。
-/// @param  
+
+float mech_angle=0;
 void foc_demo_2(motor *motor){
-    float mech_angle=0,mech_angle_zero=0;
     int elec_angle=0;
-    motor->driver.foc_motor_enable(1);
-    foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 0);
-    foc_delay_ms(1000);
-    motor->driver.foc_get_mech_angle(&mech_angle_zero);
-    foc_debug_printf("mech_angle_zero=%.2f\n",mech_angle_zero);
-    foc_delay_ms(1000);
+    foc_base_angle_calibration(motor); // 校准初始角度
+    foc_debug_printf("mech_angle_zero=%.2f\n",motor->mech_angle_zero);
+
 
     while (1)
     {
         motor->driver.foc_get_mech_angle(&mech_angle);
         foc_debug_printf("mech_angle=%.2f\n",mech_angle);
-        elec_angle = (mech_angle - mech_angle_zero)*motor->pole_pairs;
-        foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max/2, elec_angle+90.0f);
+        elec_angle = (mech_angle - motor->mech_angle_zero)*motor->pole_pairs;
+        foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max/2, elec_angle+90.0f);
     }
     
 }
 
-/// @brief 每隔1s顺时针通电ABC三相,并显示三相电流。用于调试电流正反，正确情况：A通电A相电流正，B通电B相电流正，C通电C相电流正
-/// @param  
+
 void foc_demo_31(motor *motor){
     float phase_a_current, phase_b_current, phase_c_current;
 
     motor->driver.foc_motor_enable(1);
     while (1)
     {
-        foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 0);
+        foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 0);
         foc_delay_ms(500);
         motor->driver.foc_get_phase_current(&phase_a_current, &phase_b_current, &phase_c_current);
-        foc_debug_printf("A phase_a_current=%.2f, phase_b_current=%.2f, phase_c_current=%.2f\n", phase_a_current, phase_b_current, phase_c_current);
+        foc_debug_printf("A---phase_a_current=%.2f, phase_b_current=%.2f, phase_c_current=%.2f\n", phase_a_current, phase_b_current, phase_c_current);
         foc_delay_ms(500);
-        foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 120);
-        foc_delay_ms(500);
-        motor->driver.foc_get_phase_current(&phase_a_current, &phase_b_current, &phase_c_current);
-        foc_debug_printf("B phase_a_current=%.2f, phase_b_current=%.2f, phase_c_current=%.2f\n", phase_a_current, phase_b_current, phase_c_current);
-        foc_delay_ms(500);
-        foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 240);
+        foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 120);
         foc_delay_ms(500);
         motor->driver.foc_get_phase_current(&phase_a_current, &phase_b_current, &phase_c_current);
-        foc_debug_printf("C phase_a_current=%.2f, phase_b_current=%.2f, phase_c_current=%.2f\n", phase_a_current, phase_b_current, phase_c_current);
+        foc_debug_printf("B---phase_a_current=%.2f, phase_b_current=%.2f, phase_c_current=%.2f\n", phase_a_current, phase_b_current, phase_c_current);
+        foc_delay_ms(500);
+        foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 240);
+        foc_delay_ms(500);
+        motor->driver.foc_get_phase_current(&phase_a_current, &phase_b_current, &phase_c_current);
+        foc_debug_printf("C---phase_a_current=%.2f, phase_b_current=%.2f, phase_c_current=%.2f\n", phase_a_current, phase_b_current, phase_c_current);
         foc_delay_ms(500);
     }
     
 }
 
-/// @brief 依赖角度传感器、电流传感器。以90°固定电压矢量控制电机顺时针转动,显示三相电流
-/// @param motor_en 是否启用电机
+
 void foc_demo_32(motor *motor,uint8_t motor_en){
     float phase_a_current, phase_b_current, phase_c_current;
-    float mech_angle=0,mech_angle_zero=0;
+    float mech_angle=0;
     int elec_angle=0;
-    motor->driver.foc_motor_enable(motor_en); // 使能电机驱动
-
-    foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 0);
-    foc_delay_ms(1000);
-    motor->driver.foc_get_mech_angle(&mech_angle_zero);
-
+    foc_base_angle_calibration(motor); // 校准初始角度
     while (1)
     {
         motor->driver.foc_get_mech_angle(&mech_angle);
-        elec_angle = (mech_angle - mech_angle_zero)*motor->pole_pairs;
-        foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max/2, elec_angle+90.0f);
+        elec_angle = (mech_angle - motor->mech_angle_zero)*motor->pole_pairs;
+        foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max/2, elec_angle+90.0f);
         motor->driver.foc_get_phase_current(&phase_a_current, &phase_b_current, &phase_c_current);
         foc_debug_printf("%.2f,%.2f,%.2f\n", phase_a_current, phase_b_current, phase_c_current);
     }
     
 }
-/// @brief 依赖角度传感器、电流传感器。以固定电压矢量控制电机，显示IQ和ID电流
-/// @param motor_en 是否启用电机
+
 void foc_demo_4(motor *motor,uint8_t motor_en){
     float phase_a_current, phase_b_current, phase_c_current;
-    float mech_angle=0,mech_angle_zero=0;
+    float mech_angle=0;
     float iq=0,id=0;
     int elec_angle=0;
     vector parker_x,parker_y;
     vector current_vec;
     vector voltage_vec;
     float current_vec_angle=0;
-    motor->driver.foc_motor_enable(motor_en); // 使能电机驱动
-    foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 0);
-    foc_delay_ms(1000);
-    motor->driver.foc_get_mech_angle(&mech_angle_zero);
+    foc_base_angle_calibration(motor); // 校准初始角度
 
     while (1)
     {
         motor->driver.foc_get_mech_angle(&mech_angle);
         motor->driver.foc_get_phase_current(&phase_a_current, &phase_b_current, &phase_c_current);
-        elec_angle = (mech_angle - mech_angle_zero)*motor->pole_pairs;
+        elec_angle = (mech_angle - motor->mech_angle_zero)*motor->pole_pairs;
         parker_x.x = cosf(elec_angle*PI/180.0f);
         parker_x.y = sinf(elec_angle*PI/180.0f);
         parker_y.x = -parker_x.y;
@@ -521,12 +522,12 @@ void foc_demo_4(motor *motor,uint8_t motor_en){
         voltage_vec.x = 0;
         voltage_vec.y = 15;
         
-        foc_motor_svpwm_control(motor,vector_add(vector_multiply(parker_x,voltage_vec.x),vector_multiply(parker_y,voltage_vec.y)));
+        foc_motor_spwm_control(motor,vector_add(vector_multiply(parker_x,voltage_vec.x),vector_multiply(parker_y,voltage_vec.y)));
     }
     
 }
 
-/// @brief 依赖角度传感器、电流传感器。力矩控制，显示IQ、ID、VQ、VD
+/// @brief 依赖角度传感器、电流传感器、极对数。力矩控制，显示IQ、ID、VQ、VD
 /// @param motor_en 是否启用电机
 /// @param target_iq 目标电流，和力矩成正比
 void foc_demo_5(motor *motor,uint8_t motor_en,float target_iq){
@@ -556,7 +557,7 @@ void foc_demo_5(motor *motor,uint8_t motor_en,float target_iq){
     pid_id.i=0;
 
     motor->driver.foc_motor_enable(motor_en); // 使能电机驱动
-    foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 0);
+    foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 0);
     foc_delay_ms(1000);
     motor->driver.foc_get_mech_angle(&mech_angle_zero);
 
@@ -589,8 +590,6 @@ void foc_demo_5(motor *motor,uint8_t motor_en,float target_iq){
     
 }
 
-/// @brief demo4基础+IQ、ID低通滤波，显示IQ和ID电流
-/// @param motor_en 是否启用电机
 void foc_demo_6(motor *motor,uint8_t motor_en){
     float phase_a_current, phase_b_current, phase_c_current;
     float mech_angle=0,mech_angle_zero=0;
@@ -600,7 +599,7 @@ void foc_demo_6(motor *motor,uint8_t motor_en){
     vector current_vec;
     vector voltage_vec;
     motor->driver.foc_motor_enable(motor_en); // 使能电机驱动
-    foc_motor_vector_control_by_angle(motor,motor->motor_pwm_max, 0);
+    foc_motor_spwm_control_by_angle(motor,motor->motor_pwm_max, 0);
     foc_delay_ms(1000);
     motor->driver.foc_get_mech_angle(&mech_angle_zero);
 

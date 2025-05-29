@@ -92,8 +92,8 @@ void foc_speed_update(motor *motor,float interval);
 //设置位置环PID
 void foc_position_set_pid_param(motor *motor,float scale,float alpha,float kp,float ki,float kd,float imax);
 //位置环更新，参考调用频率1khz
-void foc_position_update(motor *motor);
-void foc_position_update_two(motor *motor);
+void foc_position_update(motor *motor); //三环版本
+void foc_position_update_two(motor *motor); //双环版本
 
 //设置控制模式
 void foc_set_mode(motor *motor,foc_mode mode);
@@ -101,14 +101,60 @@ void foc_set_mode(motor *motor,foc_mode mode);
 void foc_set_target(motor *motor,float target);
 
 /*
-    演示函数，用于调试
+    调试函数
+    debug functions
 */
-void foc_demo_1(motor *motor);
+
+/*
+    Obtain motor pole pairs. Output at pwm_max (Note: control this value to prevent motor overheating or damage), 
+    fixed at 0 electrical angle. Manually rotate the motor one full circle, the number of intervals required is the motor's pole pairs.
+    获得电机极对数。以pwm_max输出（注意控制此值，否则电机发烫或烧坏电机），固定为0电角度，此时手动转动电机，转一圈需要用的间隔数即电机的极对数
+*/
+void foc_demo_0(motor *motor);  
+
+/*
+    Rotate 90 electrical degrees clockwise every 1s at pwm_max. Swap phase sequence if counterclockwise rotation is needed.
+    每隔1s以pwm_max顺时针转动90电角度。如果为逆时针需要换线序
+*/
+void foc_demo_1(motor *motor);  
+
+/*
+    Verify pole pair correctness and angle increment direction. Depends on angle sensor/pole pairs.
+    Continuous clockwise rotation at fixed 90° voltage vector. Rotation fails if pole pairs incorrect. Angle increases clockwise.
+    用于测试极对数是否正确，角度增量方向是否正常。依赖角度传感器、极对数。以90°固定电压矢量连续顺时针转动。极对数不对则无法连续转动。顺时针角度增加。
+*/
 void foc_demo_2(motor *motor);
-void foc_demo_31(motor *motor);
-void foc_demo_32(motor *motor,uint8_t motor_en);
-void foc_demo_4(motor *motor,uint8_t motor_en);
-void foc_demo_5(motor *motor,uint8_t motor_en,float target_iq);
-void foc_demo_6(motor *motor,uint8_t motor_en);
+
+/*
+    Debug current direction. Energize ABC phases clockwise every 1s and display three-phase currents.
+    Normal: A phase current positive when A energized, same for B/C.
+    用于调试电流方向。每隔1s顺时针通电ABC三相,并显示三相电流。正常情况：A通电A相电流正，B通电B相电流正，C通电C相电流正
+*/
+void foc_demo_31(motor *motor); 
+
+/*
+    Control motor clockwise at fixed 90° voltage vector. Depends on angle sensor/current sensor/pole pairs. Displays three-phase currents.
+    依赖角度传感器、电流传感器、极对数。以90°固定电压矢量控制电机顺时针转动,显示三相电流
+*/
+void foc_demo_32(motor *motor,uint8_t motor_en);    
+
+/*
+    Control motor at fixed 90° voltage vector. Displays IQ and ID currents. 
+    Normal: ID near 0 when stalled. Depends on angle/current sensors/pole pairs.
+    依赖角度传感器、电流传感器、极对数。以90°固定电压矢量控制电机，显示IQ和ID电流。正常情况堵转ID接近0
+*/
+void foc_demo_4(motor *motor,uint8_t motor_en); 
+
+/*
+    Torque control. Displays IQ, ID, VQ, VD. Depends on angle/current sensors/pole pairs.
+    依赖角度传感器、电流传感器、极对数。力矩控制，显示IQ、ID、VQ、VD
+*/
+void foc_demo_5(motor *motor,uint8_t motor_en,float target_iq); 
+
+/*
+    Based on demo4 with IQ/ID low-pass filtering added. Displays IQ and ID currents.
+    demo4为原型添加IQ、ID低通滤波，显示IQ和ID电流
+*/
+void foc_demo_6(motor *motor,uint8_t motor_en); 
 
 #endif

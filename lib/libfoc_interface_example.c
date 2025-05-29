@@ -54,7 +54,7 @@ void foc_motor_set_phase(uint16_t phase_a, uint16_t phase_b, uint16_t phase_c)
     
 }
 
-// uint8_t as5600_buf[2];
+uint8_t as5600_buf[2];
 
 /// @brief 获得机械角度。
 /// @param angle 角度，顺时针增加，单位1°
