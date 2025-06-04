@@ -100,6 +100,13 @@ void foc_set_mode(motor *motor,foc_mode mode);
 //设置电机控制目标值
 void foc_set_target(motor *motor,float target);
 
+//获取电机力矩（IQ，和力矩成正比，需要手动乘以常数）
+float foc_get_torque(motor *motor);
+//获取电机速度
+float foc_get_speed(motor *motor);
+//获取电机位置
+float foc_get_position(motor *motor);
+
 /*
     调试函数
     debug functions

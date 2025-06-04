@@ -401,6 +401,22 @@ void foc_set_target(motor *motor,float target){
     }
 }
 
+float foc_get_torque(motor *motor)
+{
+
+    return motor->iq; // 扭矩= 电流 * 常数
+}
+
+float foc_get_speed(motor *motor)
+{
+    //TODO，待实现
+    return 0.0f;
+}
+
+float foc_get_position(motor *motor)
+{
+    return motor->mech_angle; // 返回角度0-360度
+}
 
 void foc_demo_0(motor *motor){
     motor->driver.foc_motor_enable(1);
